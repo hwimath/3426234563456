@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>만 단위</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 스타일 -->
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            background-color: #f9fafb;
+            margin: 0;
+            padding: 0;
+        }
+        #gameTitle {
+            background-color: #2563eb;
+            color: white;
+            padding: 20px;
+            font-size: 2em;
+        }
+        #scoreBoard {
+            margin: 20px;
+            font-size: 1.2em;
+        }
+        #energyBarContainer {
+            width: 80%;
+            height: 20px;
+            background-color: #ddd;
+            margin: 0 auto;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #energyBar {
+            width: 100%;
+            height: 100%;
+            background-color: #34d399;
+            transition: width 0.1s linear;
+        }
+        #questionDisplay {
+            font-size: 2em;
+            margin: 30px;
+        }
+        #buttonsContainer {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 20px;
+        }
+        .answerButton {
+            width: 40%;
+            max-width: 200px;
+            margin: 10px;
+            padding: 15px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #fff;
+            border: 2px solid #2563eb;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+        .answerButton:hover {
+            background-color: #2563eb;
+            color: #fff;
+        }
+        #resultMessage {
+            font-size: 1.5em;
+            margin: 20px;
+            height: 40px;
+        }
+        #finalScore {
+            font-size: 2em;
+            margin: 50px;
+            color: #d32f2f;
+        }
+        #startButton, #sendScoreButton {
+            font-size: 1.5em;
+            padding: 15px 30px;
+            cursor: pointer;
+            background-color: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            margin-top: 30px;
+        }
+        #startButton:hover, #sendScoreButton:hover {
+            background-color: #1e40af;
+        }
+        #watermark {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 1em;
+            color: rgba(0, 0, 0, 0.3);
+            user-select: none;
+        }
+        #nameInputContainer {
+            margin: 20px;
+        }
+        #response {
+            margin: 20px;
+            font-size: 1em;
+            color: #333;
+            white-space: pre-wrap;
+            text-align: left;
+            display: inline-block;
+            max-width: 80%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameTitle">만 단위</div>
+
+    <!-- 이름 입력 필드 -->
+    <div id="nameInputContainer">
+        <label for="playerName">이름을 입력하세요: </label>
+        <input type="text" id="playerName" placeholder="이름을 입력하세요">
+    </div>
+
+    <div id="scoreBoard">점수: <span id="score">0</span> | 남은 기회: <span id="lives">3</span>/3</div>
+    <div id="energyBarContainer">
+        <div id="energyBar"></div>
+    </div>
+    <div id="questionDisplay"></div>
+    <div id="buttonsContainer"></div>
+    <div id="resultMessage"></div>
+    <button id="startButton">게임 시작하기</button>
+    <div id="finalScore"></div>
+    <button id="sendScoreButton" style="display: none;">점수 전송하기</button>
+    <div id="response"></div>
+
+    <!-- 워터마크 -->
+    <div id="watermark">휘매쓰</div>
+
+    <!-- 스크립트 -->
+    <script>
+        let score = 0;
+        let lives = 3;
+        let timeLimit = 40000; // 초기 제한 시간 40초
+        let timeRemaining;
+        let energyBarInterval;
+        let questionCount = 0;
+        let gameStartTime;
+        let elapsedTime = 0;
+        let playerName = '';
+
+        const questionDisplay = document.getElementById('questionDisplay');
+        const buttonsContainer = document.getElementById('buttonsContainer');
+        const resultMessage = document.getElementById('resultMessage');
+        const finalScore = document.getElementById('finalScore');
+        const startButton = document.getElementById('startButton');
+        const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives');
+        const energyBar = document.getElementById('energyBar');
+        const sendScoreButton = document.getElementById('sendScoreButton');
+        const responseDiv = document.getElementById('response');
+        const playerNameInput = document.getElementById('playerName');
+
+        // 문제 유형별 8문제씩 구성
+        const questions = [
+            // 유형 1: 10000과 다른 수의 차이 계산
+            { text: "10000은 9000보다 ?만큼 더 큰 수입니다.", answer: 1000 },
+            { text: "10000은 8500보다 ?만큼 더 큰 수입니다.", answer: 1500 },
+            { text: "10000은 7500보다 ?만큼 더 큰 수입니다.", answer: 2500 },
+            { text: "10000은 5000보다 ?만큼 더 큰 수입니다.", answer: 5000 },
+            { text: "10000은 9500보다 ?만큼 더 큰 수입니다.", answer: 500 },
+            { text: "10000은 3000보다 ?만큼 더 큰 수입니다.", answer: 7000 },
+            { text: "10000은 6000보다 ?만큼 더 큰 수입니다.", answer: 4000 },
+            { text: "10000은 8000보다 ?만큼 더 큰 수입니다.", answer: 2000 },
+
+            // 유형 2: 수에서 10000을 빼서 계산
+            { text: "10000은 ?보다 10만큼 더 큰 수입니다.", answer: 9990 },
+            { text: "10000은 ?보다 20만큼 더 큰 수입니다.", answer: 9980 },
+            { text: "10000은 ?보다 100만큼 더 큰 수입니다.", answer: 9900 },
+            { text: "10000은 ?보다 50만큼 더 큰 수입니다.", answer: 9950 },
+            { text: "10000은 ?보다 500만큼 더 큰 수입니다.", answer: 9500 },
+            { text: "10000은 ?보다 2000만큼 더 큰 수입니다.", answer: 8000 },
+            { text: "10000은 ?보다 4000만큼 더 큰 수입니다.", answer: 6000 },
+            { text: "10000은 ?보다 7000만큼 더 큰 수입니다.", answer: 3000 },
+
+            // 유형 3: 1000이 몇 개 있는지 물어보는 문제
+            { text: "1000이 10개인 수는 ? 입니다.", answer: 10000 },
+            { text: "1000이 5개인 수는 ? 입니다.", answer: 5000 },
+            { text: "1000이 3개인 수는 ? 입니다.", answer: 3000 },
+            { text: "1000이 6개인 수는 ? 입니다.", answer: 6000 },
+            { text: "1000이 8개인 수는 ? 입니다.", answer: 8000 },
+            { text: "1000이 2개인 수는 ? 입니다.", answer: 2000 },
+            { text: "1000이 9개인 수는 ? 입니다.", answer: 9000 },
+            { text: "1000이 4개인 수는 ? 입니다.", answer: 4000 },
+
+            // 유형 4: 10000이 몇 개 있는지 물어보는 문제
+            { text: "10000이 2개인 수는 ?입니다.", answer: 20000 },
+            { text: "10000이 1개인 수는 ?입니다.", answer: 10000 },
+            { text: "10000이 3개인 수는 ?입니다.", answer: 30000 },
+            { text: "10000이 4개인 수는 ?입니다.", answer: 40000 },
+            { text: "10000이 5개인 수는 ?입니다.", answer: 50000 },
+            { text: "10000이 6개인 수는 ?입니다.", answer: 60000 },
+            { text: "10000이 7개인 수는 ?입니다.", answer: 70000 },
+            { text: "10000이 8개인 수는 ?입니다.", answer: 80000 },
+
+            // 유형 5: 숫자 읽기 문제
+            { text: "10000이 3개인 수는 ?라고 읽습니다.", answer: "삼만" },
+            { text: "30512는 ?라고 읽습니다.", answer: "삼만오백십이" },
+            { text: "12000은 ?라고 읽습니다.", answer: "만이천" },
+            { text: "47000은 ?라고 읽습니다.", answer: "사만칠천" },
+            { text: "69000은 ?라고 읽습니다.", answer: "육만구천" },
+            { text: "51000은 ?라고 읽습니다.", answer: "오만천" },
+            { text: "15000은 ?라고 읽습니다.", answer: "만오천" },
+            { text: "37000은 ?라고 읽습니다.", answer: "삼만칠천" },
+
+            // 유형 6: 여러 자리 수 계산 문제
+            { text: "10000이 3개, 1000이 2개, 100이 1개, 10이 7개, 1이 9개인 수는 ?입니다.", answer: 32079 },
+            { text: "10000이 2개, 1000이 5개, 100이 4개, 10이 8개인 수는 ?입니다.", answer: 25480 },
+            { text: "10000이 4개, 1000이 3개, 100이 6개, 10이 9개인 수는 ?입니다.", answer: 43690 },
+            { text: "10000이 5개, 1000이 1개, 100이 9개, 10이 3개인 수는 ?입니다.", answer: 51930 },
+            { text: "10000이 2개, 1000이 7개, 100이 5개, 10이 4개인 수는 ?입니다.", answer: 27540 },
+            { text: "10000이 1개, 1000이 3개, 100이 9개, 10이 2개인 수는 ?입니다.", answer: 13920 },
+            { text: "10000이 6개, 1000이 2개, 100이 7개, 10이 1개인 수는 ?입니다.", answer: 62710 },
+            { text: "10000이 3개, 1000이 1개, 100이 8개, 10이 5개인 수는 ?입니다.", answer: 31850 }
+        ];
+
+        startButton.addEventListener('click', startGame);
+        sendScoreButton.addEventListener('click', sendScore);
+
+        function startGame() {
+            playerName = playerNameInput.value.trim();
+            if (playerName === "") {
+                alert("이름을 입력해주세요.");
+                return;
+            }
+
+            score = 0;
+            lives = 3;
+            timeLimit = 40000;
+            elapsedTime = 0;
+            finalScore.textContent = '';
+            resultMessage.textContent = '';
+            responseDiv.textContent = '';
+            sendScoreButton.style.display = 'none';
+            startButton.style.display = 'none';
+            playerNameInput.disabled = true;
+            updateScoreBoard();
+            gameStartTime = Date.now();
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            const selectedQuestion = questions[Math.floor(Math.random() * questions.length)];
+            questionDisplay.textContent = selectedQuestion.text;
+
+            const correctAnswer = selectedQuestion.answer;
+            const options = [correctAnswer];
+
+            // 만약 정답이 문자열이라면 숫자 옵션을 생성하지 않음
+            if (typeof correctAnswer === 'number') {
+                while (options.length < 4) {
+                    const wrongAnswer = correctAnswer + getRandomInt(-5000, 5000);
+                    if (!options.includes(wrongAnswer) && wrongAnswer > 0) {
+                        options.push(wrongAnswer);
+                    }
+                }
+            } else {
+                // 문자열 정답인 경우, 임의의 문자열을 추가
+                const wrongOptions = generateStringOptions(correctAnswer);
+                options.push(...wrongOptions.slice(0, 3));
+            }
+
+            options.sort(() => Math.random() - 0.5);
+            buttonsContainer.innerHTML = '';
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.classList.add('answerButton');
+                button.textContent = option;
+                button.addEventListener('click', () => checkAnswer(option, correctAnswer));
+                buttonsContainer.appendChild(button);
+            });
+
+            startTimer(); // 문제마다 타이머 시작
+        }
+
+        function generateStringOptions(correctAnswer) {
+            const sampleReadings = [
+                "일만", "이만", "삼만", "사만", "오만",
+                "육만", "칠만", "팔만", "구만", "십만",
+                "만일", "만이", "만삼", "만사", "만오",
+                "만육", "만칠", "만팔", "만구"
+            ];
+            const options = [];
+            while (options.length < 3) {
+                const option = sampleReadings[getRandomInt(0, sampleReadings.length - 1)];
+                if (option !== correctAnswer && !options.includes(option)) {
+                    options.push(option);
+                }
+            }
+            return options;
+        }
+
+        function checkAnswer(selectedAnswer, correctAnswer) {
+            clearInterval(energyBarInterval);
+            if (selectedAnswer === correctAnswer) {
+                score += 10;
+                resultMessage.style.color = 'green';
+                resultMessage.textContent = '정답입니다!';
+            } else {
+                lives--;
+                resultMessage.style.color = 'red';
+                resultMessage.textContent = '오답입니다!';
+            }
+            updateScoreBoard();
+            if (lives > 0) {
+                setTimeout(nextQuestion, 1000);
+            } else {
+                endGame();
+            }
+        }
+
+        function startTimer() {
+            timeRemaining = timeLimit;
+            updateEnergyBar();
+            energyBarInterval = setInterval(() => {
+                timeRemaining -= 100; // 100ms마다 감소
+                updateEnergyBar();
+                if (timeRemaining <= 0) {
+                    clearInterval(energyBarInterval);
+                    lives--;
+                    resultMessage.style.color = 'red';
+                    resultMessage.textContent = '시간 초과!';
+                    updateScoreBoard();
+                    if (lives > 0) {
+                        setTimeout(nextQuestion, 1000);
+                    } else {
+                        endGame();
+                    }
+                }
+            }, 100);
+        }
+
+        function updateEnergyBar() {
+            const width = (timeRemaining / timeLimit) * 100;
+            energyBar.style.width = width + '%';
+        }
+
+        function updateScoreBoard() {
+            scoreElement.textContent = score;
+            livesElement.textContent = lives;
+        }
+
+        function endGame() {
+            clearInterval(energyBarInterval);
+            buttonsContainer.innerHTML = '';
+            questionDisplay.textContent = '';
+            finalScore.textContent = `게임 종료! 총점: ${score}점`;
+            sendScoreButton.style.display = 'inline-block';
+            startButton.textContent = '다시 시작하기';
+            startButton.style.display = 'inline-block';
+        }
+
+        async function sendScore() {
+            const game = "만 단위";
+            const name = playerName;
+            const scoreToSend = score;
+            const endTime = Date.now();
+            elapsedTime = Math.floor((endTime - gameStartTime) / 1000); // 초 단위
+
+            await saveData(game, name, scoreToSend, elapsedTime);
+        }
+
+        async function saveData(game, name, score, elapsedTime) {
+            const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+
+            const requestData = {
+                game,
+                name,
+                score: parseInt(score, 10),
+                elapsedTime: parseInt(elapsedTime, 10)
+            };
+
+            try {
+                const response = await fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const responseData = await response.json();
+
+                if (response.ok) {
+                    responseDiv.style.color = 'green';
+                    responseDiv.innerText = 
+                        `성공: ${JSON.stringify(responseData, null, 2)}`;
+                } else {
+                    responseDiv.style.color = 'red';
+                    responseDiv.innerText = 
+                        `오류: ${JSON.stringify(responseData, null, 2)}`;
+                }
+            } catch (error) {
+                console.error('요청 실패:', error);
+                responseDiv.style.color = 'red';
+                responseDiv.innerText = 
+                    `네트워크 오류: ${error.message}`;
+            }
+        }
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+    </script>
+
+</body>
+</html>
